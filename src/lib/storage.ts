@@ -14,6 +14,7 @@ export const EMPTY_STATE: AppState = {
   sources: [],
   plans: [],
   draft: null,
+  classSettings: { className: "", lessons: [], catalog: [], catalogSourceId: null, catalogNotes: "" },
   prefs: { hideCompleted: false },
 };
 
@@ -26,6 +27,7 @@ function load(): AppState {
       ...EMPTY_STATE,
       ...parsed,
       prefs: { ...EMPTY_STATE.prefs, ...parsed.prefs },
+      classSettings: { ...EMPTY_STATE.classSettings, ...parsed.classSettings },
       version: 1,
     };
   } catch {

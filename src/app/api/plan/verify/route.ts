@@ -1,7 +1,7 @@
 import { verificationSchema, verifyRequestSchema } from "@/lib/plan-schema";
 import { errorMessage, isDemoMode } from "@/lib/server/anthropic";
 import { demoDelay, demoVerification } from "@/lib/server/demo";
-import { verifyInstruction } from "@/lib/server/prompts";
+import { SYSTEM_PROMPT, verifyInstruction } from "@/lib/server/prompts";
 import { runStructured } from "@/lib/server/run";
 
 export const maxDuration = 300;
@@ -19,7 +19,11 @@ export async function POST(request: Request) {
     return Response.json({ verification: demoVerification(req, generation) });
   }
   try {
-    const verification = await runStructured(verificationSchema, req, verifyInstruction(req, generation));
+    const verification = await runStructured(verificationSchema, {
+      system: SYSTEM_PROMPT,
+      sources: req.sources,
+      instruction: verifyInstruction(req, generation),
+    });
     return Response.json({ verification });
   } catch (err) {
     const { message, status } = errorMessage(err);

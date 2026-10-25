@@ -1,4 +1,4 @@
-import { eachDate, formatShort, isDateKey, isSaturday } from "./date";
+import { eachDate, formatShort, isDateKey, isSaturday, weekday } from "./date";
 import { holidayName } from "./holidays";
 import type { AiTask, GenerationOutput, VerificationOutput } from "./plan-schema";
 import {
@@ -96,12 +96,39 @@ export function buildDraft(input: BuildDraftInput): PlanDraft {
     params,
     sourceIds: input.sourceIds,
     analysis: generation.analysis,
-    lessonDays: generation.lessonDays.filter(isDateKey),
+    ...resolveLessonDays(params, generation.lessonDays),
     dayNotes,
     tasks,
     verification: { summary: verification.summary, dayChecks: verification.dayChecks },
     excluded: dedupeExcluded(excluded),
   };
+}
+
+/**
+ * 授業日の確定。クラス設定（保護者確認済み）の曜日を正とする。
+ * AI が資料から追加の授業日を見つけた場合は加える（その日は軽くなる側なので安全）。
+ * 設定上の授業日を AI が授業なしと判断した場合は外さず、保護者に確認を促す。
+ */
+export function resolveLessonDays(
+  params: PlanParams,
+  aiLessonDays: string[],
+): { lessonDays: string[]; lessonNotes: string[] } {
+  const weekdays = new Set(params.lessons.filter((l) => l.subjects.length > 0).map((l) => l.weekday));
+  const inRange = (d: string) => isDateKey(d) && d >= params.startDate && d <= params.endDate;
+  const expected = eachDate(params.startDate, params.endDate).filter((d) => weekdays.has(weekday(d)));
+  const ai = aiLessonDays.filter(inRange);
+  if (weekdays.size === 0) return { lessonDays: ai, lessonNotes: [] };
+
+  const aiSet = new Set(ai);
+  const expectedSet = new Set(expected);
+  const notes: string[] = [];
+  for (const d of expected) {
+    if (!aiSet.has(d)) notes.push(`${formatShort(d)} はAIが資料から「授業なし（休講など）」と判断しました。授業日として軽めの計画にしています。休講なら必要に応じてタスクを追加してください`);
+  }
+  for (const d of ai) {
+    if (!expectedSet.has(d)) notes.push(`${formatShort(d)} はクラスの授業曜日ではありませんが、資料から授業ありと判断し、授業日として扱っています`);
+  }
+  return { lessonDays: [...new Set([...expected, ...ai])].sort(), lessonNotes: notes };
 }
 
 function fromAi(date: string, t: AiTask, evidence: DraftTask["evidence"]): DraftTask {

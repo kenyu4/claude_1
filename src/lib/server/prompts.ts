@@ -2,7 +2,7 @@ import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { formatShort } from "@/lib/date";
 import { holidaysBetween } from "@/lib/holidays";
-import type { GenerateRequest, GenerationOutput } from "@/lib/plan-schema";
+import { WEEKDAY_NAMES, type GenerateRequest, type GenerationOutput, type SourceRef } from "@/lib/plan-schema";
 
 // 生成・検証の両方で同じ system と資料ブロックを使い、資料部分をプロンプトキャッシュで再利用する。
 
@@ -12,6 +12,12 @@ export const SYSTEM_PROMPT = `あなたは SAPIX 小学5年生の家庭学習計
 - 教材範囲・ページ・授業内容・テキスト番号・テスト日・単元名・時代名などは、必ずアップロード資料の記述で確認できたものだけを使う。あなたの一般知識や推測で補わない。
 - 資料で確認できないことは「不明」と扱う。不明な部分を含むタスクは、確認できる部分だけで成立するなら確認できる範囲で書き、成立しないなら入れずに excluded に理由付きで記録する。
 - 各タスクの evidence には、根拠にした資料の id と、その資料中の該当記述（資料の文言をそのまま短く）を必ず1件以上入れる。
+
+# クラスと授業日
+- 条件に示す「このクラスの SAPIX 授業」は保護者が時間割から確認した確定情報。計画期間内でその曜日にあたる日を授業日とし、lessonDays に入れる。
+- ただしスケジュール資料で休講・お休み・テスト等により授業がないと確認できる日は授業日から外し、通常と別の日に授業があると確認できる日は加える。どちらも analysis.steps の④授業スケジュールに日付と理由を書く。
+- 授業日にはその曜日の科目の授業がある。授業後〜次の授業までの家庭学習は、その科目の当週の内容（配布済みの範囲）を中心に組み立てる。
+- 時間割の他クラスの行は使わない。
 
 # 計画を作る前に必ずこの順序で確認する
 ① 今日の日付 ② 現在のクラス ③ 時間割 ④ 授業スケジュール ⑤ 各教材の配布日 ⑥ 次回授業 ⑦ 次回確認テスト ⑧ テスト範囲 ⑨ 家庭学習ナビ ⑩ 過去テスト結果・弱点
@@ -78,14 +84,14 @@ function isImage(mime: string): mime is "image/jpeg" | "image/png" | "image/gif"
 }
 
 /** 資料ブロック（全ファイル）。最後のブロックにキャッシュ指定を付ける */
-export function sourceBlocks(req: GenerateRequest): Anthropic.Beta.BetaContentBlockParam[] {
+export function sourceBlocks(sources: SourceRef[]): Anthropic.Beta.BetaContentBlockParam[] {
   const blocks: Anthropic.Beta.BetaContentBlockParam[] = [
     {
       type: "text",
-      text: `以下はアップロードされた SAPIX 資料です（${req.sources.length}件）。各資料の直前に id・分類・ファイル名を示します。evidence.sourceId にはこの id を使ってください。`,
+      text: `以下はアップロードされた SAPIX 資料です（${sources.length}件）。各資料の直前に id・分類・ファイル名を示します。evidence.sourceId にはこの id を使ってください。`,
     },
   ];
-  for (const s of req.sources) {
+  for (const s of sources) {
     blocks.push({
       type: "text",
       text: `【資料 id=${s.id}】分類: ${s.category} / ファイル名: ${s.name}${s.memo ? ` / 保護者メモ: ${s.memo}` : ""} / アップロード: ${s.uploadedAt.slice(0, 10)}`,
@@ -103,6 +109,14 @@ export function sourceBlocks(req: GenerateRequest): Anthropic.Beta.BetaContentBl
   return blocks;
 }
 
+export function lessonText(lessons: GenerateRequest["params"]["lessons"]): string {
+  const days = [...lessons]
+    .filter((l) => l.subjects.length > 0)
+    .sort((a, b) => ((a.weekday + 6) % 7) - ((b.weekday + 6) % 7));
+  if (days.length === 0) return "授業曜日の設定なし（資料から判断。確認できなければ不明）";
+  return days.map((l) => `${WEEKDAY_NAMES[l.weekday]}曜 ${l.subjects.join("・")}`).join(" / ");
+}
+
 function contextText(req: GenerateRequest): string {
   const p = req.params;
   const existing =
@@ -116,7 +130,8 @@ function contextText(req: GenerateRequest): string {
 - 今日の日付: ${p.today}（${formatShort(p.today)}）
 - 計画期間: ${p.startDate} 〜 ${p.endDate}
 - 計画期間内の祝日（学校は休み）: ${holidays.length ? holidays.map(([d, n]) => `${d}（${formatShort(d)}）${n}`).join("、") : "なし"}
-- 現在のクラス（保護者入力）: ${p.currentClass || "未入力（資料から判断。確認できなければ不明）"}
+- 現在のクラス（保護者が選択・確認済み）: ${p.currentClass}
+- このクラスの SAPIX 授業（保護者が時間割で確認済み・確定情報）: ${lessonText(p.lessons)}
 - 保護者からの補足: ${p.notes || "なし"}
 
 # 登録済みのタスク（参考・完了状況）
@@ -149,3 +164,12 @@ ${VERIFY_CHECKLIST}
 - dayChecks は計画期間の全日分。各項目の status は ok / fixed / excluded / na（その日に該当タスクがない）のいずれかで、note に確認内容を短く書く。
 - days には検証・修正後の最終計画を全日分入れる。問題がなかったタスクはそのまま残す。evidence は資料の記述と一致するものだけ残す。`;
 }
+
+export const TIMETABLE_SYSTEM_PROMPT = `あなたは SAPIX の時間割表を読み取る担当者です。アップロードされた時間割表に書かれていることだけを根拠に、5年生の各クラス（コース）が何曜日にどの科目の授業を受けるかを抽出します。一般知識や推測で補わず、読み取れないことは notes に書きます。出力はすべて日本語。`;
+
+export const TIMETABLE_INSTRUCTION = `時間割表から、5年生（コース名が 5 で始まるもの）の全クラスについて、授業のある曜日と科目を抽出してください。
+
+- 科目は 算数・国語・理科・社会 のいずれか。「算数A」「算数B」のような区分は科目名（算数）にまとめる。
+- 各曜日について、そのクラスがその日に受ける授業の科目をすべて挙げる。
+- 2つのクラスが1つの枠にまとめられ、各クラスの行に別々の科目が書かれている形式では、授業時間（コマ数）の記載と照らして、同じ日に2コマを入れ替えて受ける形式かを判断する。そう判断できる場合は、その枠の科目を両クラスとも受ける科目として挙げ、前提にしたことを notes に書く。判断できない場合は書かれている科目だけを挙げ、notes にその旨を書く。
+- 授業のない曜日は含めない。quote には時間割中の該当箇所を短く書く。`;

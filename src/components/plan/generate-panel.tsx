@@ -7,6 +7,7 @@ import { buildDraft } from "@/lib/plan-rules";
 import { updateState } from "@/lib/storage";
 import type { AppState, PlanParams } from "@/lib/types";
 import { btn, field } from "../ui";
+import { lessonsSummary } from "./class-panel";
 
 type Phase = "idle" | "generating" | "verifying" | "error";
 
@@ -17,14 +18,18 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return json;
 }
 
+type FormParams = Omit<PlanParams, "currentClass" | "lessons">;
+
 export function GeneratePanel({ state, today, mode }: { state: AppState; today: string; mode: "live" | "demo" | null }) {
-  const [params, setParams] = useState<PlanParams>(() => ({
+  const [form, setForm] = useState<FormParams>(() => ({
     today,
     startDate: today,
     endDate: addDays(today, 13),
-    currentClass: state.draft?.params.currentClass ?? "",
     notes: state.draft?.params.notes ?? "",
   }));
+  const cls = state.classSettings;
+  const params: PlanParams = { ...form, currentClass: cls.className, lessons: cls.lessons };
+  const classReady = cls.className !== "" && cls.lessons.length > 0;
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
   const active = state.sources.filter((s) => s.active);
@@ -70,13 +75,13 @@ export function GeneratePanel({ state, today, mode }: { state: AppState; today: 
     }
   }
 
-  const set = (k: keyof PlanParams) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setParams((p) => ({ ...p, [k]: e.target.value }));
+  const set = (k: keyof FormParams) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((p) => ({ ...p, [k]: e.target.value }));
 
   return (
     <section className="space-y-3">
       <div>
-        <h2 className="text-lg font-bold">2. AIで計画案を作成</h2>
+        <h2 className="text-lg font-bold">3. AIで計画案を作成</h2>
         <p className="mt-0.5 text-sm text-zinc-500">
           資料に書かれていることだけを根拠に作成し、1日ずつ検証してから表示します。
         </p>
@@ -98,9 +103,19 @@ export function GeneratePanel({ state, today, mode }: { state: AppState; today: 
           <input type="date" value={params.endDate} min={params.startDate} onChange={set("endDate")} className={field} />
         </Field>
       </div>
-      <Field label="現在のクラス（任意・空欄なら資料から判断）">
-        <input value={params.currentClass} onChange={set("currentClass")} placeholder="例: α2" className={field} />
-      </Field>
+      <div className="rounded-xl bg-zinc-50 px-3 py-2.5 text-sm">
+        <span className="text-xs font-bold text-zinc-600">クラス</span>
+        <p className="mt-0.5">
+          {classReady ? (
+            <>
+              <span className="font-bold">{cls.className}</span>
+              <span className="ml-2 text-zinc-600">{lessonsSummary(cls.lessons)}</span>
+            </>
+          ) : (
+            <span className="text-zinc-500">「2. クラスを選ぶ」でクラスと授業曜日を設定してください</span>
+          )}
+        </p>
+      </div>
       <Field label="補足（任意）">
         <textarea
           value={params.notes}
@@ -111,7 +126,11 @@ export function GeneratePanel({ state, today, mode }: { state: AppState; today: 
         />
       </Field>
 
-      <button className={`${btn.primary} w-full`} onClick={run} disabled={running || active.length === 0 || params.startDate > params.endDate}>
+      <button
+        className={`${btn.primary} w-full`}
+        onClick={run}
+        disabled={running || active.length === 0 || !classReady || params.startDate > params.endDate}
+      >
         {phase === "generating"
           ? "資料を解析して計画案を作成中…"
           : phase === "verifying"

@@ -1,7 +1,7 @@
 import { generateRequestSchema, generationSchema } from "@/lib/plan-schema";
 import { errorMessage, isDemoMode } from "@/lib/server/anthropic";
 import { demoDelay, demoGeneration } from "@/lib/server/demo";
-import { generateInstruction } from "@/lib/server/prompts";
+import { generateInstruction, SYSTEM_PROMPT } from "@/lib/server/prompts";
 import { runStructured } from "@/lib/server/run";
 
 export const maxDuration = 300;
@@ -22,7 +22,11 @@ export async function POST(request: Request) {
     return Response.json({ mode: "demo", generation: demoGeneration(req) });
   }
   try {
-    const generation = await runStructured(generationSchema, req, generateInstruction(req));
+    const generation = await runStructured(generationSchema, {
+      system: SYSTEM_PROMPT,
+      sources: req.sources,
+      instruction: generateInstruction(req),
+    });
     return Response.json({ mode: "live", generation });
   } catch (err) {
     const { message, status } = errorMessage(err);

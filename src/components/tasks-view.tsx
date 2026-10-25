@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addDays, eachDate, formatLong, formatShort, weekRange } from "@/lib/date";
+import { addDays, eachDate, formatLong, formatShort, weekday, weekRange } from "@/lib/date";
 import { sortTasks } from "@/lib/diff";
 import { holidayName } from "@/lib/holidays";
 import { updateState, useAppState, useHydrated } from "@/lib/storage";
@@ -149,6 +149,7 @@ export function TasksView() {
               isPast={date < today}
               tasks={byDate.get(date) ?? []}
               hideCompleted={hide}
+              lesson={state.classSettings.lessons.find((l) => l.weekday === weekday(date))?.subjects.join("・") ?? ""}
             />
           ))}
         </div>
@@ -163,6 +164,7 @@ function DayCard({
   isPast,
   tasks,
   hideCompleted,
+  lesson,
   ref,
 }: {
   date: string;
@@ -170,6 +172,8 @@ function DayCard({
   isPast: boolean;
   tasks: Task[];
   hideCompleted: boolean;
+  /** SAPIX の授業科目（なければ空） */
+  lesson: string;
   ref?: React.Ref<HTMLElement>;
 }) {
   const done = tasks.filter((t) => t.completed).length;
@@ -190,6 +194,7 @@ function DayCard({
           {holidayName(date) && (
             <span className="ml-2 align-middle text-xs font-medium text-rose-600">{holidayName(date)}</span>
           )}
+          {lesson && <span className="ml-2 align-middle text-xs font-medium text-zinc-500">SAPIX {lesson}</span>}
         </h2>
         <span className="text-sm tabular-nums text-zinc-500">
           {done} / {tasks.length}

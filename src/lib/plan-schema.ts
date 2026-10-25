@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SOURCE_CATEGORIES, SUBJECTS, TASK_CATEGORIES } from "./types";
+import { LESSON_SUBJECTS, SOURCE_CATEGORIES, SUBJECTS, TASK_CATEGORIES } from "./types";
 
 // AI の出力形式（構造化出力の JSON Schema の元）と API の入出力スキーマ。
 // サーバー・クライアント双方で使う。
@@ -98,11 +98,17 @@ export const sourceRefSchema = z.object({
 });
 export type SourceRef = z.infer<typeof sourceRefSchema>;
 
+export const lessonDaySchema = z.object({
+  weekday: z.number().int().min(0).max(6),
+  subjects: z.array(z.enum(LESSON_SUBJECTS)),
+});
+
 export const planParamsSchema = z.object({
   today: z.string(),
   startDate: z.string(),
   endDate: z.string(),
-  currentClass: z.string(),
+  currentClass: z.string().min(1),
+  lessons: z.array(lessonDaySchema),
   notes: z.string(),
 });
 
@@ -124,3 +130,32 @@ export const verifyRequestSchema = generateRequestSchema.extend({
   generation: generationSchema,
 });
 export type VerifyRequest = z.infer<typeof verifyRequestSchema>;
+
+// ---- 時間割の読み取り ----
+
+export const WEEKDAY_NAMES = ["日", "月", "火", "水", "木", "金", "土"] as const;
+
+export const timetableSchema = z.strictObject({
+  classes: z
+    .array(
+      z.strictObject({
+        name: z.string().describe("クラス（コース）名。時間割の表記どおり（例: 5H、5α1）"),
+        lessons: z
+          .array(
+            z.strictObject({
+              weekday: z.enum(WEEKDAY_NAMES).describe("授業のある曜日"),
+              subjects: z.array(z.enum(LESSON_SUBJECTS)).describe("その曜日に受ける授業の科目すべて"),
+            }),
+          )
+          .describe("授業のある曜日のみ"),
+        quote: z.string().describe("時間割中の該当箇所の記述（短く）"),
+      }),
+    )
+    .describe("5年生のクラスのみ。時間割に載っている順"),
+  notes: z.string().describe("読み取りで不確かな点・前提にしたこと。なければ空文字"),
+});
+export type TimetableOutput = z.infer<typeof timetableSchema>;
+
+export const timetableRequestSchema = z.object({
+  sources: z.array(sourceRefSchema).min(1),
+});

@@ -101,8 +101,9 @@ export function DraftReview({ state }: { state: AppState }) {
     <section id="draft" className="scroll-mt-16 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold">3. 計画案を確認</h2>
+          <h2 className="text-lg font-bold">4. 計画案を確認</h2>
           <p className="mt-0.5 text-sm text-zinc-500">
+            {draft.params.currentClass && `${draft.params.currentClass} ・ `}
             {formatShort(draft.params.startDate)} 〜 {formatShort(draft.params.endDate)} ・ {draft.tasks.length}タスク
             {draft.mode === "demo" && <span className="ml-2 whitespace-nowrap rounded bg-amber-100 px-1.5 py-0.5 text-xs font-bold text-amber-900">デモ</span>}
           </p>
@@ -113,6 +114,15 @@ export function DraftReview({ state }: { state: AppState }) {
       </div>
 
       <VerificationPanel draft={draft} sources={state.sources} />
+
+      {(draft.lessonNotes ?? []).length > 0 && (
+        <div className="space-y-1 rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+          <p className="font-bold">授業日についての確認</p>
+          {draft.lessonNotes!.map((n) => (
+            <p key={n}>・{n}</p>
+          ))}
+        </div>
+      )}
 
       {balance && <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-900">⚠ {balance}</p>}
 

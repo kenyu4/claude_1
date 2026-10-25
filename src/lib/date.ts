@@ -57,3 +57,7 @@ export function eachDate(start: string, end: string): string[] {
   for (let k = start; k <= end && out.length < 400; k = addDays(k, 1)) out.push(k);
   return out;
 }
+
+/** 月曜始まりの表示順 */
+export const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+export const WEEKDAY_LABELS = WEEKDAYS;

@@ -1,7 +1,8 @@
 import "server-only";
 import { eachDate, formatShort, weekday } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
-import type { AiTask, GenerateRequest, GenerationOutput, VerificationOutput } from "@/lib/plan-schema";
+import type { AiTask, GenerateRequest, GenerationOutput, TimetableOutput, VerificationOutput } from "@/lib/plan-schema";
+import type { LessonSubject } from "@/lib/types";
 
 // APIキー未設定時のデモ用。資料は読まずに固定パターンで計画案を作る（画面・操作確認用）。
 // 実在の範囲を装わないよう、すべてのタスクに「デモ」と明記する。
@@ -17,9 +18,10 @@ export function demoGeneration(req: GenerateRequest): GenerationOutput {
   const scope = pickSource(req, ["確認テスト範囲"]);
   const ev = (sourceId: string, quote: string) => [{ sourceId, quote }];
 
-  // デモでは火・木・金を授業日とみなす
+  // クラス設定の授業曜日を授業日とする
   const dates = eachDate(req.params.startDate, req.params.endDate);
-  const lessonDays = dates.filter((d) => [2, 4, 5].includes(weekday(d)));
+  const lessonWeekdays = req.params.lessons.filter((l) => l.subjects.length > 0).map((l) => l.weekday);
+  const lessonDays = dates.filter((d) => lessonWeekdays.includes(weekday(d)));
 
   const reviewQueue: AiTask["subject"][] = ["理科", "社会", "算数", "国語"];
   const days = dates.map((date) => {
@@ -54,7 +56,7 @@ export function demoGeneration(req: GenerateRequest): GenerationOutput {
       // 理科・社会を厚めに: ほぼ毎日どちらか、週の半分は両方
       if (wd !== 2 || holiday) tasks.push(t("理科", "通常学習", wd % 2 ? "理科 テーマ1〜3＋確認問題1〜4" : "理科 確認問題1〜4の誤答のみ", "理科 テーマ1〜3・確認問題1〜4"));
       if (wd !== 4 || holiday) tasks.push(t("社会", "通常学習", wd % 2 ? "社会 重要語句・人物・出来事" : "社会 デイリーステップ＋確認問題基礎編", "社会 デイリーステップ"));
-      if (wd === 3) tasks.push(t("国語", "言葉ナビ", "国語 言葉ナビ①", "言葉ナビ確認テスト範囲", "次回確認テストから逆算して2回配置"));
+      if (wd === 4) tasks.push(t("国語", "言葉ナビ", "国語 言葉ナビ①", "言葉ナビ確認テスト範囲", "次回確認テストから逆算して2回配置"));
       if (wd === 0) tasks.push(t("国語", "言葉ナビ", "国語 言葉ナビ②", "言葉ナビ確認テスト範囲", "次回確認テストから逆算して2回配置"));
     }
     // テスト見直し: 期間2日目以降の授業のない日に、教科別に1つずつ（理科・社会を先に）
@@ -123,4 +125,20 @@ export function demoVerification(req: GenerateRequest, gen: GenerationOutput): V
 /** デモ時に「AIが考えている」感を出しすぎないよう、短い待ち時間だけ入れる */
 export function demoDelay(): Promise<void> {
   return new Promise((r) => setTimeout(r, 600));
+}
+
+export function demoTimetable(): TimetableOutput {
+  const week = (mon: LessonSubject[], wed: LessonSubject[], fri: LessonSubject[]) => [
+    { weekday: "月" as const, subjects: mon },
+    { weekday: "水" as const, subjects: wed },
+    { weekday: "金" as const, subjects: fri },
+  ];
+  return {
+    classes: [
+      { name: "5α1", lessons: week(["理科", "社会"], ["国語"], ["算数"]), quote: "（デモ）" },
+      { name: "5H", lessons: week(["国語"], ["算数"], ["理科", "社会"]), quote: "（デモ）" },
+      { name: "5F", lessons: week(["算数"], ["理科", "社会"], ["国語"]), quote: "（デモ）" },
+    ],
+    notes: "デモモードのため時間割は読み取っていません。表示しているのはサンプルです。実際のクラスの曜日・科目は必ず確認・修正してください。",
+  };
 }

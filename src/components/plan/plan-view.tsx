@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAppState, useHydrated } from "@/lib/storage";
 import { useToday } from "@/lib/use-today";
+import { ClassPanel } from "./class-panel";
 import { DataTools } from "./data-tools";
 import { DraftReview } from "./draft-review";
 import { GeneratePanel } from "./generate-panel";
@@ -34,6 +35,7 @@ export function PlanView() {
         <p className="mt-0.5 text-sm text-zinc-500">保護者用 ・ 資料をもとにAIが計画案を作り、確認してから登録します</p>
       </div>
       <SourcesPanel sources={state.sources} />
+      <ClassPanel settings={state.classSettings} sources={state.sources} />
       <GeneratePanel state={state} today={today} mode={mode} />
       {state.draft && <DraftReview state={state} />}
       <hr className="border-zinc-100" />

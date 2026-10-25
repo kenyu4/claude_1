@@ -136,6 +136,8 @@ export interface PlanDraft {
     unknowns: string[];
   };
   lessonDays: string[];
+  /** クラス設定の授業日と資料（AI）の判断が食い違った日の説明 */
+  lessonNotes?: string[];
   dayNotes: Record<string, string>;
   tasks: DraftTask[];
   verification: {
@@ -150,7 +152,36 @@ export interface PlanParams {
   startDate: string;
   endDate: string;
   currentClass: string;
+  /** 保護者が確認したクラスの授業曜日・科目 */
+  lessons: LessonDay[];
   notes: string;
+}
+
+/** 授業のある教科（SAPIX の授業科目） */
+export const LESSON_SUBJECTS = ["算数", "国語", "理科", "社会"] as const;
+export type LessonSubject = (typeof LESSON_SUBJECTS)[number];
+
+/** 曜日ごとの授業。weekday は 0=日〜6=土 */
+export interface LessonDay {
+  weekday: number;
+  subjects: LessonSubject[];
+}
+
+/** 時間割から読み取ったクラスの週間授業 */
+export interface ClassSchedule {
+  name: string;
+  lessons: LessonDay[];
+  /** 時間割中の該当記述 */
+  quote: string;
+}
+
+export interface ClassSettings {
+  className: string;
+  lessons: LessonDay[];
+  /** 時間割から読み取ったクラス一覧（選択肢） */
+  catalog: ClassSchedule[];
+  catalogSourceId: string | null;
+  catalogNotes: string;
 }
 
 /** 確定済み計画の履歴 */
@@ -172,6 +203,7 @@ export interface AppState {
   sources: SourceDocument[];
   plans: PlanRecord[];
   draft: PlanDraft | null;
+  classSettings: ClassSettings;
   prefs: {
     hideCompleted: boolean;
   };

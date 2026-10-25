@@ -1,8 +1,8 @@
 import "server-only";
 import type { z } from "zod";
-import { toJsonSchema, type GenerateRequest } from "@/lib/plan-schema";
+import { toJsonSchema, type SourceRef } from "@/lib/plan-schema";
 import { getClient, MODEL } from "./anthropic";
-import { SYSTEM_PROMPT, sourceBlocks } from "./prompts";
+import { sourceBlocks } from "./prompts";
 
 /**
  * 資料＋指示を送り、構造化出力（JSON Schema）で結果を受け取って zod で検証する。
@@ -10,8 +10,7 @@ import { SYSTEM_PROMPT, sourceBlocks } from "./prompts";
  */
 export async function runStructured<T extends z.ZodType>(
   schema: T,
-  req: GenerateRequest,
-  instruction: string,
+  input: { system: string; sources: SourceRef[]; instruction: string },
 ): Promise<z.infer<T>> {
   const stream = getClient().beta.messages.stream({
     model: MODEL,
@@ -24,11 +23,11 @@ export async function runStructured<T extends z.ZodType>(
     // 安全分類器による拒否時はサーバー側で別モデルに自動フォールバック
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    system: SYSTEM_PROMPT,
+    system: input.system,
     messages: [
       {
         role: "user",
-        content: [...sourceBlocks(req), { type: "text", text: instruction }],
+        content: [...sourceBlocks(input.sources), { type: "text", text: input.instruction }],
       },
     ],
   });
