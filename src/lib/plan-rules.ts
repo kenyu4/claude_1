@@ -1,4 +1,5 @@
 import { eachDate, formatShort, isDateKey, isSaturday } from "./date";
+import { holidayName } from "./holidays";
 import type { AiTask, GenerationOutput, VerificationOutput } from "./plan-schema";
 import {
   RULE_SOURCE_ID,
@@ -143,7 +144,8 @@ export function draftWarnings(tasks: DraftTask[], lessonDays: string[]): Record<
   for (const [date, list] of byDate) {
     const study = list.filter((t) => !isPapax(t.title));
     if (study.length > MAX_TASKS_PER_DAY) push(date, `タスクが${study.length}件あります（目安は最大${MAX_TASKS_PER_DAY}件）`);
-    if (lessons.has(date) && study.length > MAX_TASKS_LESSON_DAY)
+    // 祝日は学校が休みなので、授業日でも軽くしなくてよい
+    if (lessons.has(date) && !holidayName(date) && study.length > MAX_TASKS_LESSON_DAY)
       push(date, `授業日なのにタスクが${study.length}件あります（授業日は軽めに）`);
   }
 
@@ -156,4 +158,14 @@ export function draftWarnings(tasks: DraftTask[], lessonDays: string[]): Record<
     else seen.set(k, t.date);
   }
   return out;
+}
+
+/** 理科・社会を厚めにする方針に対して、計画案全体が薄くなっていないか */
+export function balanceWarning(tasks: DraftTask[]): string | null {
+  const count = (subject: string) =>
+    tasks.filter((t) => t.subject === subject && t.category !== "基礎トレ").length;
+  const focus = Math.min(count("理科"), count("社会"));
+  const other = Math.max(count("算数"), count("国語"));
+  if (tasks.length === 0 || focus >= other) return null;
+  return `理科・社会を厚めにする方針ですが、理科${count("理科")}件・社会${count("社会")}件に対し、算数${count("算数")}件（基礎トレ除く）・国語${count("国語")}件です。`;
 }

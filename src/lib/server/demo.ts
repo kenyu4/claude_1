@@ -1,5 +1,6 @@
 import "server-only";
 import { eachDate, formatShort, weekday } from "@/lib/date";
+import { holidayName } from "@/lib/holidays";
 import type { AiTask, GenerateRequest, GenerationOutput, VerificationOutput } from "@/lib/plan-schema";
 
 // APIキー未設定時のデモ用。資料は読まずに固定パターンで計画案を作る（画面・操作確認用）。
@@ -20,6 +21,7 @@ export function demoGeneration(req: GenerateRequest): GenerationOutput {
   const dates = eachDate(req.params.startDate, req.params.endDate);
   const lessonDays = dates.filter((d) => [2, 4, 5].includes(weekday(d)));
 
+  const reviewQueue: AiTask["subject"][] = ["理科", "社会", "算数", "国語"];
   const days = dates.map((date) => {
     const md = formatShort(date).replace(/（.）/, "");
     const tasks: AiTask[] = [
@@ -35,45 +37,32 @@ export function demoGeneration(req: GenerateRequest): GenerationOutput {
       },
     ];
     const wd = weekday(date);
-    if (!lessonDays.includes(date)) {
-      if (wd === 1 || wd === 3) {
-        tasks.push({
-          subject: "理科",
-          category: "通常学習",
-          material: "デイリーサピックス",
-          textbookNumber: "",
-          range: wd === 1 ? "テーマ1〜3" : "確認問題1〜4",
-          title: wd === 1 ? "理科 デイリーサピックス テーマ1〜3＋確認問題1〜4（デモ）" : "理科 確認問題1〜4の誤答のみ（デモ）",
-          detail: "デモデータです。実際の範囲は資料から生成されます。",
-          evidence: ev(navi, "（デモ）理科 テーマ1〜3・確認問題1〜4"),
-        });
-      }
-      if (wd === 0 || wd === 3) {
-        tasks.push({
-          subject: "国語",
-          category: "言葉ナビ",
-          material: "言葉ナビ",
-          textbookNumber: "",
-          range: "",
-          title: `国語 言葉ナビ${wd === 3 ? "①" : "②"}（デモ）`,
-          detail: "次回確認テストから逆算して2回配置（デモ）",
-          evidence: ev(scope, "（デモ）言葉ナビ確認テスト範囲"),
-        });
-      }
-      if (wd === 6 || wd === 1) {
-        tasks.push({
-          subject: "社会",
-          category: "通常学習",
-          material: "デイリーサピックス",
-          textbookNumber: "",
-          range: "",
-          title: "社会 デイリーステップ＋確認問題基礎編（デモ）",
-          detail: "",
-          evidence: ev(navi, "（デモ）社会 デイリーステップ"),
-        });
-      }
+    const holiday = holidayName(date);
+    const lesson = lessonDays.includes(date);
+    const t = (subject: AiTask["subject"], category: AiTask["category"], title: string, quote: string, detail = ""): AiTask => ({
+      subject,
+      category,
+      material: category === "テスト直し" ? "マンスリー確認テスト" : "デイリーサピックス",
+      textbookNumber: "",
+      range: "",
+      title: `${title}（デモ ${md}）`,
+      detail,
+      evidence: ev(category === "テスト直し" ? sched : category === "言葉ナビ" ? scope : navi, `（デモ）${quote}`),
+    });
+    // 授業日（祝日を除く）は基礎トレのみ
+    if (!lesson || holiday) {
+      // 理科・社会を厚めに: ほぼ毎日どちらか、週の半分は両方
+      if (wd !== 2 || holiday) tasks.push(t("理科", "通常学習", wd % 2 ? "理科 テーマ1〜3＋確認問題1〜4" : "理科 確認問題1〜4の誤答のみ", "理科 テーマ1〜3・確認問題1〜4"));
+      if (wd !== 4 || holiday) tasks.push(t("社会", "通常学習", wd % 2 ? "社会 重要語句・人物・出来事" : "社会 デイリーステップ＋確認問題基礎編", "社会 デイリーステップ"));
+      if (wd === 3) tasks.push(t("国語", "言葉ナビ", "国語 言葉ナビ①", "言葉ナビ確認テスト範囲", "次回確認テストから逆算して2回配置"));
+      if (wd === 0) tasks.push(t("国語", "言葉ナビ", "国語 言葉ナビ②", "言葉ナビ確認テスト範囲", "次回確認テストから逆算して2回配置"));
     }
-    return { date, note: lessonDays.includes(date) ? "授業日（デモ）" : "", tasks };
+    // テスト見直し: 期間2日目以降の授業のない日に、教科別に1つずつ（理科・社会を先に）
+    if (dates.indexOf(date) >= 1 && (!lesson || holiday) && reviewQueue.length > 0) {
+      const subject = reviewQueue.shift()!;
+      tasks.push(t(subject, "テスト直し", `マンスリー見直し ${subject}`, "マンスリー確認テスト実施", "成績表が出たら正答率の高い誤答を優先"));
+    }
+    return { date, note: lessonDays.includes(date) ? (holidayName(date) ? "授業日・祝日（デモ）" : "授業日（デモ）") : "", tasks };
   });
 
   return {
@@ -123,7 +112,7 @@ export function demoVerification(req: GenerateRequest, gen: GenerationOutput): V
       testDate: na,
       corePlus: na,
       kotobaNavi: d.tasks.some((t) => t.category === "言葉ナビ") ? ok("デモ: 2回配置") : na,
-      lessonDayLoad: gen.lessonDays.includes(d.date) ? ok("授業日は基礎トレのみ") : na,
+      lessonDayLoad: gen.lessonDays.includes(d.date) ? ok(holidayName(d.date) ? "祝日のため通常量" : "授業日は基礎トレのみ") : na,
       duplicates: ok("重複なし"),
     })),
     days: gen.days,

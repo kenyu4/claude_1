@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { eachDate, formatShort } from "@/lib/date";
 import { applyDiff, computeDiff, defaultApprovals, type DiffItem } from "@/lib/diff";
-import { draftWarnings } from "@/lib/plan-rules";
+import { holidayName } from "@/lib/holidays";
+import { balanceWarning, draftWarnings } from "@/lib/plan-rules";
 import { newId, updateState } from "@/lib/storage";
 import {
   MANUAL_SOURCE_ID,
@@ -34,6 +35,7 @@ export function DraftReview({ state }: { state: AppState }) {
   const dates = eachDate(draft.params.startDate, draft.params.endDate);
   const lessons = new Set(draft.lessonDays);
   const warnings = useMemo(() => draftWarnings(draft.tasks, draft.lessonDays), [draft.tasks, draft.lessonDays]);
+  const balance = useMemo(() => balanceWarning(draft.tasks), [draft.tasks]);
   const diff = useMemo(() => computeDiff(draft, state.tasks), [draft, state.tasks]);
   const hasExisting = diff.some((d) => d.kind !== "add");
 
@@ -112,6 +114,8 @@ export function DraftReview({ state }: { state: AppState }) {
 
       <VerificationPanel draft={draft} sources={state.sources} />
 
+      {balance && <p className="rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-900">⚠ {balance}</p>}
+
       <div className="space-y-3">
         {dates.map((date) => {
           const tasks = draft.tasks.filter((t) => t.date === date);
@@ -120,6 +124,9 @@ export function DraftReview({ state }: { state: AppState }) {
               <header className="flex flex-wrap items-center gap-2 px-4 pb-1 pt-3">
                 <h3 className="font-bold">{formatShort(date)}</h3>
                 {lessons.has(date) && <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] font-bold text-zinc-700">授業日</span>}
+                {holidayName(date) && (
+                  <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-700">{holidayName(date)}</span>
+                )}
                 {draft.dayNotes[date] && <span className="text-xs text-zinc-500">{draft.dayNotes[date]}</span>}
               </header>
               {warnings[date]?.map((w) => (

@@ -69,7 +69,7 @@ export const verificationSchema = z.strictObject({
       testDate: checkItemSchema.describe("確認テスト実施日は正しいか"),
       corePlus: checkItemSchema.describe("コアプラス範囲は正しいか"),
       kotobaNavi: checkItemSchema.describe("言葉ナビ範囲は正しいか"),
-      lessonDayLoad: checkItemSchema.describe("授業日にタスクを入れすぎていないか"),
+      lessonDayLoad: checkItemSchema.describe("授業日にタスクを入れすぎていないか（祝日は対象外）"),
       duplicates: checkItemSchema.describe("同一タスクを理由なく重複していないか"),
     }),
   ),

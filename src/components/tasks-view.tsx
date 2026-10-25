@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, eachDate, formatLong, formatShort, weekRange } from "@/lib/date";
 import { sortTasks } from "@/lib/diff";
+import { holidayName } from "@/lib/holidays";
 import { updateState, useAppState, useHydrated } from "@/lib/storage";
 import type { Task } from "@/lib/types";
 import { useToday } from "@/lib/use-today";
@@ -186,6 +187,9 @@ function DayCard({
         <h2 className={`font-bold ${isToday ? "text-lg" : "text-base"}`}>
           {formatShort(date)}
           {isToday && <span className="ml-2 rounded-md bg-zinc-900 px-1.5 py-0.5 align-middle text-[11px] text-white">今日</span>}
+          {holidayName(date) && (
+            <span className="ml-2 align-middle text-xs font-medium text-rose-600">{holidayName(date)}</span>
+          )}
         </h2>
         <span className="text-sm tabular-nums text-zinc-500">
           {done} / {tasks.length}
